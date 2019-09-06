@@ -49,29 +49,29 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
     for (id rendererConfiguration in rendererConfigurations) {
         NSAssert([rendererConfiguration isKindOfClass:[MPNativeAdRendererConfiguration class]], @"A collection view ad placer must be instantiated with rendererConfigurations that are of type MPNativeAdRendererConfiguration.");
     }
-
+    
     if (self = [super init]) {
         _collectionView = collectionView;
         _streamAdPlacer = [MPStreamAdPlacer placerWithViewController:controller adPositioning:positioning rendererConfigurations:rendererConfigurations];
         _streamAdPlacer.delegate = self;
-
+        
         _insertionTimer = [MPTimer timerWithTimeInterval:kUpdateVisibleCellsInterval
                                                   target:self
                                                 selector:@selector(updateVisibleCells)
                                                  repeats:YES
                                              runLoopMode:NSRunLoopCommonModes];
         [_insertionTimer scheduleNow];
-
+        
         _originalDataSource = collectionView.dataSource;
         _originalDelegate = collectionView.delegate;
         collectionView.dataSource = self;
         collectionView.delegate = self;
-
+        
         [_collectionView registerClass:[MPCollectionViewAdPlacerCell class] forCellWithReuseIdentifier:kCollectionViewAdPlacerReuseIdentifier];
-
+        
         [collectionView mp_setAdPlacer:self];
     }
-
+    
     return self;
 }
 
@@ -97,7 +97,7 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
 - (void)updateVisibleCells
 {
     NSArray *visiblePaths = self.collectionView.mp_indexPathsForVisibleItems;
-
+    
     if ([visiblePaths count]) {
         [self.streamAdPlacer setVisibleIndexPaths:visiblePaths];
     }
@@ -110,11 +110,11 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
     BOOL animationsWereEnabled = [UIView areAnimationsEnabled];
     //We only want to enable animations if the index path is before or within our visible cells
     BOOL animationsEnabled = ([(NSIndexPath *)[self.collectionView.indexPathsForVisibleItems lastObject] compare:indexPath] != NSOrderedAscending) && animationsWereEnabled;
-
+    
     [UIView setAnimationsEnabled:animationsEnabled];
-
-    [self.collectionView insertItemsAtIndexPaths:@[indexPath]];
-
+    
+    [self.collectionView reloadData];
+    
     [UIView setAnimationsEnabled:animationsWereEnabled];
 }
 
@@ -122,12 +122,10 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
 {
     BOOL animationsWereEnabled = [UIView areAnimationsEnabled];
     [UIView setAnimationsEnabled:NO];
-
-    [self.collectionView performBatchUpdates:^{
-        [self.collectionView deleteItemsAtIndexPaths:indexPaths];
-    } completion:^(BOOL finished) {
-        [UIView setAnimationsEnabled:animationsWereEnabled];
-    }];
+    
+    [self.collectionView reloadData];
+    
+    [UIView setAnimationsEnabled:animationsWereEnabled];
 }
 
 - (void)nativeAdWillPresentModalForStreamAdPlacer:(MPStreamAdPlacer *)adPlacer
@@ -183,11 +181,11 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
     if ([self.streamAdPlacer isAdAtIndexPath:indexPath]) {
         MPCollectionViewAdPlacerCell *cell = (MPCollectionViewAdPlacerCell *)[collectionView dequeueReusableCellWithReuseIdentifier:kCollectionViewAdPlacerReuseIdentifier forIndexPath:indexPath];
         cell.clipsToBounds = YES;
-
+        
         [self.streamAdPlacer renderAdAtIndexPath:indexPath inView:cell.contentView];
         return cell;
     }
-
+    
     NSIndexPath *originalIndexPath = [self.streamAdPlacer originalIndexPathForAdjustedIndexPath:indexPath];
     return [self.originalDataSource collectionView:collectionView cellForItemAtIndexPath:originalIndexPath];
 }
@@ -199,13 +197,13 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
     if ([self.streamAdPlacer isAdAtIndexPath:indexPath]) {
         return NO;
     }
-
+    
     id<UICollectionViewDelegate> delegate = self.originalDelegate;
     if ([delegate respondsToSelector:@selector(collectionView:canPerformAction:forItemAtIndexPath:withSender:)]) {
         NSIndexPath *originalPath = [self.streamAdPlacer originalIndexPathForAdjustedIndexPath:indexPath];
         return [delegate collectionView:collectionView canPerformAction:action forItemAtIndexPath:originalPath withSender:sender];
     }
-
+    
     return NO;
 }
 
@@ -231,7 +229,7 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
         [self.collectionView deselectItemAtIndexPath:indexPath animated:NO];
         return;
     }
-
+    
     id<UICollectionViewDelegate> delegate = self.originalDelegate;
     if ([delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
         NSIndexPath *originalPath = [self.streamAdPlacer originalIndexPathForAdjustedIndexPath:indexPath];
@@ -249,7 +247,7 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
     if ([self.streamAdPlacer isAdAtIndexPath:indexPath]) {
         return;
     }
-
+    
     id<UICollectionViewDelegate> delegate = self.originalDelegate;
     if ([delegate respondsToSelector:@selector(collectionView:performAction:forItemAtIndexPath:withSender:)]) {
         NSIndexPath *originalPath = [self.streamAdPlacer originalIndexPathForAdjustedIndexPath:indexPath];
@@ -260,28 +258,28 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
 - (BOOL)collectionView:(UICollectionView *)collectionView shouldDeselectItemAtIndexPath:(NSIndexPath *)indexPath
 {
     NSInvocation *invocation = [MPAdPlacerInvocation invokeForTarget:self.originalDelegate with2ArgSelector:@selector(collectionView:shouldDeselectItemAtIndexPath:) firstArg:collectionView secondArg:indexPath streamAdPlacer:self.streamAdPlacer];
-
+    
     return [MPAdPlacerInvocation boolResultForInvocation:invocation defaultValue:YES];
 }
 
 - (BOOL)collectionView:(UICollectionView *)collectionView shouldHighlightItemAtIndexPath:(NSIndexPath *)indexPath
 {
     NSInvocation *invocation = [MPAdPlacerInvocation invokeForTarget:self.originalDelegate with2ArgSelector:@selector(collectionView:shouldHighlightItemAtIndexPath:) firstArg:collectionView secondArg:indexPath streamAdPlacer:self.streamAdPlacer];
-
+    
     return [MPAdPlacerInvocation boolResultForInvocation:invocation defaultValue:YES];
 }
 
 - (BOOL)collectionView:(UICollectionView *)collectionView shouldSelectItemAtIndexPath:(NSIndexPath *)indexPath
 {
     NSInvocation *invocation = [MPAdPlacerInvocation invokeForTarget:self.originalDelegate with2ArgSelector:@selector(collectionView:shouldSelectItemAtIndexPath:) firstArg:collectionView secondArg:indexPath streamAdPlacer:self.streamAdPlacer];
-
+    
     return [MPAdPlacerInvocation boolResultForInvocation:invocation defaultValue:collectionView.allowsSelection];
 }
 
 - (BOOL)collectionView:(UICollectionView *)collectionView shouldShowMenuForItemAtIndexPath:(NSIndexPath *)indexPath
 {
     NSInvocation *invocation = [MPAdPlacerInvocation invokeForTarget:self.originalDelegate with2ArgSelector:@selector(collectionView:shouldShowMenuForItemAtIndexPath:) firstArg:collectionView secondArg:indexPath streamAdPlacer:self.streamAdPlacer];
-
+    
     return [MPAdPlacerInvocation boolResultForInvocation:invocation defaultValue:NO];
 }
 
@@ -299,7 +297,7 @@ static NSString * const kCollectionViewAdPlacerReuseIdentifier = @"MPCollectionV
     if ([self.streamAdPlacer isAdAtIndexPath:indexPath]) {
         return [self.streamAdPlacer sizeForAdAtIndexPath:indexPath withMaximumWidth:CGRectGetWidth(self.collectionView.bounds)];
     }
-
+    
     if ([self.originalDelegate respondsToSelector:@selector(collectionView:layout:sizeForItemAtIndexPath:)]) {
         NSIndexPath *originalPath = [self.streamAdPlacer originalIndexPathForAdjustedIndexPath:indexPath];
         id<UICollectionViewDelegateFlowLayout> flowLayout = (id<UICollectionViewDelegateFlowLayout>)[self originalDelegate];
@@ -360,7 +358,7 @@ static char kAdPlacerKey;
 - (void)mp_setDelegate:(id<UICollectionViewDelegate>)delegate
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
-
+    
     if (adPlacer) {
         adPlacer.originalDelegate = delegate;
     } else {
@@ -371,7 +369,7 @@ static char kAdPlacerKey;
 - (id<UICollectionViewDelegate>)mp_delegate
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
-
+    
     if (adPlacer) {
         return adPlacer.originalDelegate;
     } else {
@@ -382,7 +380,7 @@ static char kAdPlacerKey;
 - (void)mp_setDataSource:(id<UICollectionViewDataSource>)dataSource
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
-
+    
     if (adPlacer) {
         adPlacer.originalDataSource = dataSource;
     } else {
@@ -393,7 +391,7 @@ static char kAdPlacerKey;
 - (id<UICollectionViewDataSource>)mp_dataSource
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
-
+    
     if (adPlacer) {
         return adPlacer.originalDataSource;
     } else {
@@ -405,11 +403,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSIndexPath *adjustedIndexPath = indexPath;
-
+    
     if (adPlacer) {
         adjustedIndexPath = [adPlacer.streamAdPlacer adjustedIndexPathForOriginalIndexPath:indexPath];
     }
-
+    
     // Only pass nil through if developer passed it through
     if (!indexPath || adjustedIndexPath) {
         return [self dequeueReusableCellWithReuseIdentifier:identifier forIndexPath:adjustedIndexPath];
@@ -422,11 +420,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSArray *adjustedIndexPaths = [self indexPathsForSelectedItems];
-
+    
     if (adPlacer) {
         adjustedIndexPaths = [adPlacer.streamAdPlacer originalIndexPathsForAdjustedIndexPaths:adjustedIndexPaths];
     }
-
+    
     return adjustedIndexPaths;
 }
 
@@ -434,11 +432,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSIndexPath *adjustedIndexPath = indexPath;
-
+    
     if (adPlacer) {
         adjustedIndexPath = [adPlacer.streamAdPlacer adjustedIndexPathForOriginalIndexPath:indexPath];
     }
-
+    
     // Only pass nil through if developer passed it through
     if (!indexPath || adjustedIndexPath) {
         [self selectItemAtIndexPath:adjustedIndexPath animated:animated scrollPosition:scrollPosition];
@@ -449,11 +447,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSIndexPath *adjustedIndexPath = indexPath;
-
+    
     if (adPlacer) {
         adjustedIndexPath = [adPlacer.streamAdPlacer adjustedIndexPathForOriginalIndexPath:indexPath];
     }
-
+    
     [self deselectItemAtIndexPath:adjustedIndexPath animated:animated];
 }
 
@@ -466,11 +464,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSIndexPath *adjustedIndexPath = indexPath;
-
+    
     if (adPlacer) {
         adjustedIndexPath = [adPlacer.streamAdPlacer adjustedIndexPathForOriginalIndexPath:indexPath];
     }
-
+    
     return [self layoutAttributesForItemAtIndexPath:adjustedIndexPath];
 }
 
@@ -478,11 +476,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSIndexPath *adjustedIndexPath = [self indexPathForItemAtPoint:point];
-
+    
     if (adPlacer) {
         adjustedIndexPath = [adPlacer.streamAdPlacer originalIndexPathForAdjustedIndexPath:adjustedIndexPath];
     }
-
+    
     return adjustedIndexPath;
 }
 
@@ -490,11 +488,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSIndexPath *adjustedIndexPath = [self indexPathForCell:cell];
-
+    
     if (adPlacer) {
         adjustedIndexPath = [adPlacer.streamAdPlacer originalIndexPathForAdjustedIndexPath:adjustedIndexPath];
     }
-
+    
     return adjustedIndexPath;
 }
 
@@ -502,18 +500,18 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSIndexPath *adjustedIndexPath = indexPath;
-
+    
     if (adPlacer) {
         adjustedIndexPath = [adPlacer.streamAdPlacer adjustedIndexPathForOriginalIndexPath:adjustedIndexPath];
     }
-
+    
     return [self cellForItemAtIndexPath:adjustedIndexPath];
 }
 
 - (NSArray *)mp_visibleCells
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
-
+    
     if (adPlacer) {
         NSArray *indexPaths = [self mp_indexPathsForVisibleItems];
         NSMutableArray *visibleCells = [NSMutableArray array];
@@ -533,11 +531,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSArray *adjustedIndexPaths = [self indexPathsForVisibleItems];
-
+    
     if (adPlacer) {
         adjustedIndexPaths = [adPlacer.streamAdPlacer originalIndexPathsForAdjustedIndexPaths:adjustedIndexPaths];
     }
-
+    
     return adjustedIndexPaths;
 }
 
@@ -545,11 +543,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSIndexPath *adjustedIndexPath = indexPath;
-
+    
     if (adPlacer) {
         adjustedIndexPath = [adPlacer.streamAdPlacer adjustedIndexPathForOriginalIndexPath:adjustedIndexPath];
     }
-
+    
     // Only pass nil through if developer passed it through
     if (!indexPath || adjustedIndexPath) {
         [self scrollToItemAtIndexPath:adjustedIndexPath atScrollPosition:scrollPosition animated:animated];
@@ -559,22 +557,22 @@ static char kAdPlacerKey;
 - (void)mp_insertSections:(NSIndexSet *)sections
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
-
+    
     if (adPlacer) {
         [adPlacer.streamAdPlacer insertSections:sections];
     }
-
+    
     [self insertSections:sections];
 }
 
 - (void)mp_deleteSections:(NSIndexSet *)sections
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
-
+    
     if (adPlacer) {
         [adPlacer.streamAdPlacer deleteSections:sections];
     }
-
+    
     [self deleteSections:sections];
 }
 
@@ -586,11 +584,11 @@ static char kAdPlacerKey;
 - (void)mp_moveSection:(NSInteger)section toSection:(NSInteger)newSection
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
-
+    
     if (adPlacer) {
         [adPlacer.streamAdPlacer moveSection:section toSection:newSection];
     }
-
+    
     [self moveSection:section toSection:newSection];
 }
 
@@ -598,12 +596,12 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSArray *adjustedIndexPaths = indexPaths;
-
+    
     if (adPlacer) {
         [adPlacer.streamAdPlacer insertItemsAtIndexPaths:indexPaths];
         adjustedIndexPaths = [adPlacer.streamAdPlacer adjustedIndexPathsForOriginalIndexPaths:indexPaths];
     }
-
+    
     // We perform the actual UI insertion AFTER updating the stream ad placer's
     // data, because the insertion can trigger queries to the data source, which
     // needs to reflect the post-insertion state.
@@ -615,15 +613,15 @@ static char kAdPlacerKey;
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     [self performBatchUpdates:^{
         NSArray *adjustedIndexPaths = indexPaths;
-
+        
         if (adPlacer) {
             // We need to obtain the adjusted index paths to delete BEFORE we
             // update the stream ad placer's data.
             adjustedIndexPaths = [adPlacer.streamAdPlacer adjustedIndexPathsForOriginalIndexPaths:indexPaths];
-
+            
             [adPlacer.streamAdPlacer deleteItemsAtIndexPaths:indexPaths];
         }
-
+        
         // We perform the actual UI deletion AFTER updating the stream ad placer's
         // data, because the deletion can trigger queries to the data source, which
         // needs to reflect the post-deletion state.
@@ -635,11 +633,11 @@ static char kAdPlacerKey;
 {
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSArray *adjustedIndexPaths = indexPaths;
-
+    
     if (adPlacer) {
         adjustedIndexPaths = [adPlacer.streamAdPlacer adjustedIndexPathsForOriginalIndexPaths:indexPaths];
     }
-
+    
     [self reloadItemsAtIndexPaths:adjustedIndexPaths];
 }
 
@@ -648,16 +646,16 @@ static char kAdPlacerKey;
     MPCollectionViewAdPlacer *adPlacer = [self mp_adPlacer];
     NSIndexPath *adjustedFrom = indexPath;
     NSIndexPath *adjustedTo = newIndexPath;
-
+    
     if (adPlacer) {
         // We need to obtain the adjusted index paths to move BEFORE we
         // update the stream ad placer's data.
         adjustedFrom = [adPlacer.streamAdPlacer adjustedIndexPathForOriginalIndexPath:indexPath];
         adjustedTo = [adPlacer.streamAdPlacer adjustedIndexPathForOriginalIndexPath:newIndexPath];
-
+        
         [adPlacer.streamAdPlacer moveItemAtIndexPath:indexPath toIndexPath:newIndexPath];
     }
-
+    
     // We perform the actual UI operation AFTER updating the stream ad placer's
     // data, because the operation can trigger queries to the data source, which
     // needs to reflect the post-operation state.
